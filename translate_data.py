@@ -105,7 +105,17 @@ def worker():
     client = cah.init(
         url="http://cah.io.community/",
         device_id="cluster"
-    )      
+    )
+    
+    # number of processes depends on the number of GPUs available, can be varied
+    num_processes = torch.cuda.device_count() # TODO is this right?
+    tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_1.2B")
+
+    # target language
+    tokenizer.tgt_lang = "en"
+    model = M2M100ForConditionalGeneration.from_pretrained(
+        "facebook/m2m100_1.2B").to(device)
+    model.half()
 
     while client.jobCount() > 0 and not client.shouldDie():
         client.newJob()
@@ -122,21 +132,12 @@ def worker():
         shard = dataset.shard(354, partition, contiguous=True, keep_in_memory=True)
 
         s = time.time()
+        
         # to make parallel GPU computations possible
         try:
             mp.set_start_method('spawn', force=True)
         except RuntimeError:
             pass
-
-        # number of processes depends on the number of GPUs available, can be varied
-        num_processes = torch.cuda.device_count() # TODO is this right?
-        tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_1.2B")
-
-        # target language
-        tokenizer.tgt_lang = "en"
-        model = M2M100ForConditionalGeneration.from_pretrained(
-            "facebook/m2m100_1.2B").to(device)
-        model.half()
 
         # parallel model
         model.share_memory()
